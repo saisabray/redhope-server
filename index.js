@@ -9,127 +9,140 @@ const port = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json());
 
+// ── MongoDB connection (cached for serverless) ────────────────────────────────
+// On Vercel, each invocation may reuse the same module instance.
+// Caching the client promise avoids opening a new connection every request.
+
 const uri = process.env.MONGODB_URI;
 
-const client = new MongoClient(uri, {
-  serverApi: {
-    version: ServerApiVersion.v1,
-    strict: true,
-    deprecationErrors: true,
-  },
-});
+let cachedClient = null;
+let cachedDb     = null;
 
-async function run() {
-  try {
-    await client.connect();
-    console.log("Connected to MongoDB");
+async function getDb() {
+  if (cachedDb) return cachedDb;
 
-    const database = client.db("redhope");
-    const usersCollection = database.collection("user");
-    console.log("Connected to MongoDB and accessed the 'user' collection");
+  const client = new MongoClient(uri, {
+    serverApi: {
+      version: ServerApiVersion.v1,
+      strict: true,
+      deprecationErrors: true,
+    },
+  });
 
-    // User API
-    app.get("/users", async (req, res) => {
-      try {
-        const cursor = usersCollection.find();
-        const result = await cursor.toArray();
-        res.send(result);
-      } catch (err) {
-        console.error("Error fetching users:", err);
-        res.status(500).send({ message: "Failed to fetch users", error: err.message });
-      }
-    });
-
-    // Block / Unblock a user
-    app.patch("/users/:id/status", async (req, res) => {
-      try {
-        const { id } = req.params;
-        const { status } = req.body;
-
-        const result = await usersCollection.updateOne(
-          { _id: new ObjectId(id) },
-          { $set: { status } }
-        );
-        if (result.matchedCount === 0) {
-          return res.status(404).send({ message: "User not found" });
-        }
-        res.send({ message: `User status updated to ${status}` });
-      } catch (err) {
-        console.error("Error updating user status:", err);
-        res.status(500).send({ message: "Failed to update user status", error: err.message });
-      }
-    });
-
-    // Update user role
-    app.patch("/users/:id/role", async (req, res) => {
-      try {
-        const { id } = req.params;
-        const { role } = req.body;
-        const result = await usersCollection.updateOne(
-          { _id: new ObjectId(id) },
-          { $set: { role } }
-        );
-        if (result.matchedCount === 0) {
-          return res.status(404).send({ message: "User not found" });
-        }
-        res.send({ message: `User role updated to ${role}` });
-      } catch (err) {
-        console.error("Error updating user role:", err);
-        res.status(500).send({ message: "Failed to update user role", error: err.message });
-      }
-    });
-
-    // Get single user by id
-    app.get("/users/:id", async (req, res) => {
-      try {
-        const { id } = req.params;
-        const user = await usersCollection.findOne({ _id: new ObjectId(id) });
-        if (!user) return res.status(404).send({ message: "User not found" });
-        res.send(user);
-      } catch (err) {
-        console.error("Error fetching user:", err);
-        res.status(500).send({ message: "Failed to fetch user", error: err.message });
-      }
-    });
-
-    // Update user profile
-    app.patch("/users/:id/profile", async (req, res) => {
-      try {
-        const { id } = req.params;
-        const { name, image, bloodGroup, district, upazila } = req.body;
-        const updateFields = {};
-        if (name      !== undefined) updateFields.name      = name;
-        if (image     !== undefined) updateFields.image     = image;
-        if (bloodGroup !== undefined) updateFields.bloodGroup = bloodGroup;
-        if (district  !== undefined) updateFields.district  = district;
-        if (upazila   !== undefined) updateFields.upazila   = upazila;
-
-        const result = await usersCollection.updateOne(
-          { _id: new ObjectId(id) },
-          { $set: updateFields }
-        );
-        if (result.matchedCount === 0) {
-          return res.status(404).send({ message: "User not found" });
-        }
-        res.send({ message: "Profile updated successfully" });
-      } catch (err) {
-        console.error("Error updating profile:", err);
-        res.status(500).send({ message: "Failed to update profile", error: err.message });
-      }
-    });
-
-    // Root test route
-    app.get("/", (req, res) => {
-      res.send("Redhope server is running!");
-    });
-
-  } catch (error) {
-    console.error("Error connecting to MongoDB:", error);
-  }
+  await client.connect();
+  cachedClient = client;
+  cachedDb     = client.db("redhope");
+  return cachedDb;
 }
 
-run().catch(console.dir);
+// ── Helper: get the users collection ─────────────────────────────────────────
 
-app.listen(port, () => {
-  console.log(`Server listening on port ${port}`);
+async function users() {
+  const db = await getDb();
+  return db.collection("user");
+}
+
+// ── Routes ────────────────────────────────────────────────────────────────────
+
+// Health check
+app.get("/", (req, res) => {
+  res.send("Redhope server is running!");
 });
+
+// Get all users
+app.get("/users", async (req, res) => {
+  try {
+    const col    = await users();
+    const result = await col.find().toArray();
+    res.send(result);
+  } catch (err) {
+    console.error("Error fetching users:", err);
+    res.status(500).send({ message: "Failed to fetch users", error: err.message });
+  }
+});
+
+// Get single user by id
+app.get("/users/:id", async (req, res) => {
+  try {
+    const col  = await users();
+    const user = await col.findOne({ _id: new ObjectId(req.params.id) });
+    if (!user) return res.status(404).send({ message: "User not found" });
+    res.send(user);
+  } catch (err) {
+    console.error("Error fetching user:", err);
+    res.status(500).send({ message: "Failed to fetch user", error: err.message });
+  }
+});
+
+// Block / Unblock a user
+app.patch("/users/:id/status", async (req, res) => {
+  try {
+    const { status } = req.body;
+    const col    = await users();
+    const result = await col.updateOne(
+      { _id: new ObjectId(req.params.id) },
+      { $set: { status } }
+    );
+    if (result.matchedCount === 0)
+      return res.status(404).send({ message: "User not found" });
+    res.send({ message: `User status updated to ${status}` });
+  } catch (err) {
+    console.error("Error updating user status:", err);
+    res.status(500).send({ message: "Failed to update user status", error: err.message });
+  }
+});
+
+// Update user role
+app.patch("/users/:id/role", async (req, res) => {
+  try {
+    const { role } = req.body;
+    const col    = await users();
+    const result = await col.updateOne(
+      { _id: new ObjectId(req.params.id) },
+      { $set: { role } }
+    );
+    if (result.matchedCount === 0)
+      return res.status(404).send({ message: "User not found" });
+    res.send({ message: `User role updated to ${role}` });
+  } catch (err) {
+    console.error("Error updating user role:", err);
+    res.status(500).send({ message: "Failed to update user role", error: err.message });
+  }
+});
+
+// Update user profile (name, image, bloodGroup, district, upazila)
+app.patch("/users/:id/profile", async (req, res) => {
+  try {
+    const { name, image, bloodGroup, district, upazila } = req.body;
+    const updateFields = {};
+    if (name       !== undefined) updateFields.name       = name;
+    if (image      !== undefined) updateFields.image      = image;
+    if (bloodGroup !== undefined) updateFields.bloodGroup = bloodGroup;
+    if (district   !== undefined) updateFields.district   = district;
+    if (upazila    !== undefined) updateFields.upazila    = upazila;
+
+    const col    = await users();
+    const result = await col.updateOne(
+      { _id: new ObjectId(req.params.id) },
+      { $set: updateFields }
+    );
+    if (result.matchedCount === 0)
+      return res.status(404).send({ message: "User not found" });
+    res.send({ message: "Profile updated successfully" });
+  } catch (err) {
+    console.error("Error updating profile:", err);
+    res.status(500).send({ message: "Failed to update profile", error: err.message });
+  }
+});
+
+// ── Start (local dev only) ────────────────────────────────────────────────────
+// On Vercel this block is skipped; the module export below is what matters.
+
+if (require.main === module) {
+  app.listen(port, () => {
+    console.log(`Server listening on port ${port}`);
+  });
+}
+
+// Required for Vercel serverless
+module.exports = app;
