@@ -40,6 +40,46 @@ async function run() {
       }
     });
 
+    // Block / Unblock a user
+    app.patch("/users/:id/status", async (req, res) => {
+      try {
+        const { id } = req.params;
+        const { status } = req.body; // "active" | "blocked"
+        const { ObjectId } = require("mongodb");
+        const result = await usersCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: { status } }
+        );
+        if (result.matchedCount === 0) {
+          return res.status(404).send({ message: "User not found" });
+        }
+        res.send({ message: `User status updated to ${status}` });
+      } catch (err) {
+        console.error("Error updating user status:", err);
+        res.status(500).send({ message: "Failed to update user status", error: err.message });
+      }
+    });
+
+    // Update user role
+    app.patch("/users/:id/role", async (req, res) => {
+      try {
+        const { id } = req.params;
+        const { role } = req.body; // "donor" | "volunteer" | "admin"
+        const { ObjectId } = require("mongodb");
+        const result = await usersCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: { role } }
+        );
+        if (result.matchedCount === 0) {
+          return res.status(404).send({ message: "User not found" });
+        }
+        res.send({ message: `User role updated to ${role}` });
+      } catch (err) {
+        console.error("Error updating user role:", err);
+        res.status(500).send({ message: "Failed to update user role", error: err.message });
+      }
+    });
+
     // Root test route
     app.get("/", (req, res) => {
       res.send("Redhope server is running!");
