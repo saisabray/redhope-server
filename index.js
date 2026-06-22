@@ -26,6 +26,7 @@ async function run() {
 
     const database = client.db("redhope");
     const usersCollection = database.collection("user");
+    const donationRequestsCollection = database.collection("donationRequests");
 
     // Get all users
     app.get("/users", async (req, res) => {
@@ -108,7 +109,55 @@ async function run() {
       }
     });
 
+    // ── Donation Requests ────────────────────────────────────────────────────
+
+    // Create a new donation request
+    app.post("/donation-requests", async (req, res) => {
+      try {
+        const {
+          requesterName, requesterEmail, requesterId,
+          recipientName, recipientDistrict, recipientUpazila,
+          hospitalName, fullAddress, bloodGroup,
+          donationDate, donationTime, requestMessage,
+          status, createdAt,
+        } = req.body;
+
+        if (!requesterName || !requesterEmail || !recipientName ||
+            !recipientDistrict || !recipientUpazila || !hospitalName ||
+            !fullAddress || !bloodGroup || !donationDate ||
+            !donationTime || !requestMessage) {
+          return res.status(400).send({ message: "All fields are required." });
+        }
+
+        const doc = {
+          requesterName,
+          requesterEmail,
+          requesterId,
+          recipientName,
+          recipientDistrict,
+          recipientUpazila,
+          hospitalName,
+          fullAddress,
+          bloodGroup,
+          donationDate,
+          donationTime,
+          requestMessage,
+          status: status || "pending",
+          createdAt: createdAt || new Date().toISOString(),
+        };
+
+        const result = await donationRequestsCollection.insertOne(doc);
+        res.status(201).send({ message: "Donation request created successfully.", id: result.insertedId });
+      } catch (err) {
+        console.error("Error creating donation request:", err);
+        res.status(500).send({ message: "Failed to create donation request.", error: err.message });
+      }
+    });
+
+    
+
     // Root health check
+
     app.get("/", (req, res) => {
       res.send("Redhope server is running!");
     });
