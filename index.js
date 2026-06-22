@@ -92,7 +92,7 @@ async function run() {
       }
     });
 
-    // Update user profile (name, image, bloodGroup, district, upazila)
+    // Update user profile
     app.patch("/users/:id/profile", async (req, res) => {
       try {
         const { id } = req.params;
