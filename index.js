@@ -191,7 +191,40 @@ async function run() {
       }
     });
 
-   
+    // Update donation request 
+    app.patch("/donation-requests/:id", async (req, res) => {
+      try {
+        const {
+          recipientName, recipientDistrict, recipientUpazila,
+          hospitalName, fullAddress, bloodGroup,
+          donationDate, donationTime, requestMessage,
+        } = req.body;
+
+        const updateFields = {};
+        if (recipientName     !== undefined) updateFields.recipientName     = recipientName;
+        if (recipientDistrict !== undefined) updateFields.recipientDistrict = recipientDistrict;
+        if (recipientUpazila  !== undefined) updateFields.recipientUpazila  = recipientUpazila;
+        if (hospitalName      !== undefined) updateFields.hospitalName      = hospitalName;
+        if (fullAddress       !== undefined) updateFields.fullAddress       = fullAddress;
+        if (bloodGroup        !== undefined) updateFields.bloodGroup        = bloodGroup;
+        if (donationDate      !== undefined) updateFields.donationDate      = donationDate;
+        if (donationTime      !== undefined) updateFields.donationTime      = donationTime;
+        if (requestMessage    !== undefined) updateFields.requestMessage    = requestMessage;
+        updateFields.updatedAt = new Date().toISOString();
+
+        const result = await donationRequestsCollection.updateOne(
+          { _id: new ObjectId(req.params.id) },
+          { $set: updateFields }
+        );
+        if (result.matchedCount === 0)
+          return res.status(404).send({ message: "Donation request not found." });
+        res.send({ message: "Donation request updated successfully." });
+      } catch (err) {
+        console.error("Error updating donation request:", err);
+        res.status(500).send({ message: "Failed to update donation request.", error: err.message });
+      }
+    });
+
 
     // Root health check
 
