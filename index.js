@@ -165,6 +165,20 @@ async function run() {
       }
     });
 
+    // Get donation requests by requester email
+    app.get("/donation-requests/my/:email", async (req, res) => {
+      try {
+        const result = await donationRequestsCollection
+          .find({ requesterEmail: req.params.email })
+          .sort({ createdAt: -1 })
+          .toArray();
+        res.send(result);
+      } catch (err) {
+        console.error("Error fetching user donation requests:", err);
+        res.status(500).send({ message: "Failed to fetch donation requests.", error: err.message });
+      }
+    });
+
 
     // Root health check
 
