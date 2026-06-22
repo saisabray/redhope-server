@@ -179,6 +179,19 @@ async function run() {
       }
     });
 
+    // Get single donation request by ID
+    app.get("/donation-requests/:id", async (req, res) => {
+      try {
+        const request = await donationRequestsCollection.findOne({ _id: new ObjectId(req.params.id) });
+        if (!request) return res.status(404).send({ message: "Donation request not found." });
+        res.send(request);
+      } catch (err) {
+        console.error("Error fetching donation request:", err);
+        res.status(500).send({ message: "Failed to fetch donation request.", error: err.message });
+      }
+    });
+
+   
 
     // Root health check
 
