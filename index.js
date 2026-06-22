@@ -154,7 +154,17 @@ async function run() {
       }
     });
 
-    
+    // Get all donation requests
+    app.get("/donation-requests", async (req, res) => {
+      try {
+        const result = await donationRequestsCollection.find().sort({ createdAt: -1 }).toArray();
+        res.send(result);
+      } catch (err) {
+        console.error("Error fetching donation requests:", err);
+        res.status(500).send({ message: "Failed to fetch donation requests.", error: err.message });
+      }
+    });
+
 
     // Root health check
 
