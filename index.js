@@ -225,6 +225,23 @@ async function run() {
       }
     });
 
+    // Update donation request status
+
+    app.patch("/donation-requests/:id/status", async (req, res) => {
+      try {
+        const { status } = req.body;
+        const result = await donationRequestsCollection.updateOne(
+          { _id: new ObjectId(req.params.id) },
+          { $set: { status } }
+        );
+        if (result.matchedCount === 0)
+          return res.status(404).send({ message: "Donation request not found." });
+        res.send({ message: `Donation request status updated to ${status}.` });
+      } catch (err) {
+        console.error("Error updating donation request status:", err);
+        res.status(500).send({ message: "Failed to update status.", error: err.message });
+      }
+    });
 
     // Delete a donation request
     app.delete("/donation-requests/:id", async (req, res) => {
