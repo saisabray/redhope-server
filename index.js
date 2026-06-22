@@ -1,5 +1,5 @@
 const express = require("express");
-const { MongoClient, ServerApiVersion } = require("mongodb");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const cors = require("cors");
 require("dotenv").config();
 
@@ -44,8 +44,8 @@ async function run() {
     app.patch("/users/:id/status", async (req, res) => {
       try {
         const { id } = req.params;
-        const { status } = req.body; // "active" | "blocked"
-        const { ObjectId } = require("mongodb");
+        const { status } = req.body;
+
         const result = await usersCollection.updateOne(
           { _id: new ObjectId(id) },
           { $set: { status } }
@@ -64,8 +64,7 @@ async function run() {
     app.patch("/users/:id/role", async (req, res) => {
       try {
         const { id } = req.params;
-        const { role } = req.body; // "donor" | "volunteer" | "admin"
-        const { ObjectId } = require("mongodb");
+        const { role } = req.body;
         const result = await usersCollection.updateOne(
           { _id: new ObjectId(id) },
           { $set: { role } }
@@ -77,6 +76,45 @@ async function run() {
       } catch (err) {
         console.error("Error updating user role:", err);
         res.status(500).send({ message: "Failed to update user role", error: err.message });
+      }
+    });
+
+    // Get single user by id
+    app.get("/users/:id", async (req, res) => {
+      try {
+        const { id } = req.params;
+        const user = await usersCollection.findOne({ _id: new ObjectId(id) });
+        if (!user) return res.status(404).send({ message: "User not found" });
+        res.send(user);
+      } catch (err) {
+        console.error("Error fetching user:", err);
+        res.status(500).send({ message: "Failed to fetch user", error: err.message });
+      }
+    });
+
+    // Update user profile (name, image, bloodGroup, district, upazila)
+    app.patch("/users/:id/profile", async (req, res) => {
+      try {
+        const { id } = req.params;
+        const { name, image, bloodGroup, district, upazila } = req.body;
+        const updateFields = {};
+        if (name      !== undefined) updateFields.name      = name;
+        if (image     !== undefined) updateFields.image     = image;
+        if (bloodGroup !== undefined) updateFields.bloodGroup = bloodGroup;
+        if (district  !== undefined) updateFields.district  = district;
+        if (upazila   !== undefined) updateFields.upazila   = upazila;
+
+        const result = await usersCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: updateFields }
+        );
+        if (result.matchedCount === 0) {
+          return res.status(404).send({ message: "User not found" });
+        }
+        res.send({ message: "Profile updated successfully" });
+      } catch (err) {
+        console.error("Error updating profile:", err);
+        res.status(500).send({ message: "Failed to update profile", error: err.message });
       }
     });
 
