@@ -226,6 +226,19 @@ async function run() {
     });
 
 
+    // Delete a donation request
+    app.delete("/donation-requests/:id", async (req, res) => {
+      try {
+        const result = await donationRequestsCollection.deleteOne({ _id: new ObjectId(req.params.id) });
+        if (result.deletedCount === 0)
+          return res.status(404).send({ message: "Donation request not found." });
+        res.send({ message: "Donation request deleted successfully." });
+      } catch (err) {
+        console.error("Error deleting donation request:", err);
+        res.status(500).send({ message: "Failed to delete donation request.", error: err.message });
+      }
+    });
+
     // Root health check
 
     app.get("/", (req, res) => {
