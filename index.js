@@ -135,8 +135,6 @@ app.patch("/users/:id/profile", async (req, res) => {
   }
 });
 
-// ── Start (local dev only) ────────────────────────────────────────────────────
-// On Vercel this block is skipped; the module export below is what matters.
 
 if (require.main === module) {
   app.listen(port, () => {
@@ -144,5 +142,4 @@ if (require.main === module) {
   });
 }
 
-// Required for Vercel serverless
 module.exports = app;
