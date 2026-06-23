@@ -29,6 +29,64 @@ async function run() {
     const donationRequestsCollection = database.collection("donationRequests");
     const fundingCollection = database.collection("funding");
 
+    //Funding
+    app.post("/funding",async(req,res)=>{
+        try{
+            const {sessionID,userId,amount,stripeId} = req.body
+            const result = await fundingCollection.insertOne({
+              sessionID,
+              userId,
+              amount,
+              stripeId,
+              createdAt: new Date().toISOString()
+            })
+            res.send({message:"Funding created successfully.",id:result.insertedId})
+        }catch(err){
+            console.error("Error creating funding:",err)
+            res.status(500).send({message:"Failed to create funding.",error:err.message})
+        }
+    })  
+
+    // Get all funding records
+    app.get("/funding", async (req, res) => {
+      try {
+        const result = await fundingCollection.aggregate([
+          {
+            $addFields: {
+              userObjId: { $toObjectId: "$userId" }
+            }
+          },
+          {
+            $lookup: {
+              from: "user",
+              localField: "userObjId",
+              foreignField: "_id",
+              as: "user"
+            }
+          },
+          {
+            $unwind: { path: "$user", preserveNullAndEmptyArrays: true }
+          },
+          {
+            $project: {
+              _id: 1,
+              amount: 1,
+              createdAt: 1,
+              userName: "$user.name",
+              userEmail: "$user.email"
+            }
+          },
+          {
+            $sort: { createdAt: -1 }
+          }
+        ]).toArray();
+        res.send(result);
+      } catch (err) {
+        console.error("Error fetching fundings:", err);
+        res.status(500).send({ message: "Failed to fetch fundings", error: err.message });
+      }
+    });
+
     // Get all users
     app.get("/users", async (req, res) => {
       try {
