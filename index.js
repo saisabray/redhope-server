@@ -39,6 +39,33 @@ async function run() {
       }
     });
 
+    // Search donors by bloodGroup, district, upazila (must be before /users/:id)
+    app.get("/users/search", async (req, res) => {
+      try {
+        const { bloodGroup, district, upazila } = req.query;
+
+        // Always scope to active donors only
+        const query = {
+          role: "donor",
+          status: { $ne: "blocked" },
+        };
+
+        if (bloodGroup) query.bloodGroup = bloodGroup;
+        if (district)   query.district   = district;
+        if (upazila)    query.upazila    = upazila;
+
+        const result = await usersCollection
+          .find(query, { projection: { name: 1, email: 1, image: 1, bloodGroup: 1, district: 1, upazila: 1, role: 1, status: 1 } })
+          .sort({ name: 1 })
+          .toArray();
+
+        res.send(result);
+      } catch (err) {
+        console.error("Error searching donors:", err);
+        res.status(500).send({ message: "Failed to search donors.", error: err.message });
+      }
+    });
+
     // Get single user by id
     app.get("/users/:id", async (req, res) => {
       try {
@@ -225,14 +252,19 @@ async function run() {
       }
     });
 
-    // Update donation request status
-
+    // Update donation request status 
     app.patch("/donation-requests/:id/status", async (req, res) => {
       try {
-        const { status } = req.body;
+        const { status, donorName, donorEmail, donorId } = req.body;
+        const updateFields = { status };
+        if (donorName)  updateFields.donorName  = donorName;
+        if (donorEmail) updateFields.donorEmail = donorEmail;
+        if (donorId)    updateFields.donorId    = donorId;
+        if (status === "inprogress") updateFields.acceptedAt = new Date().toISOString();
+
         const result = await donationRequestsCollection.updateOne(
           { _id: new ObjectId(req.params.id) },
-          { $set: { status } }
+          { $set: updateFields }
         );
         if (result.matchedCount === 0)
           return res.status(404).send({ message: "Donation request not found." });
@@ -242,6 +274,7 @@ async function run() {
         res.status(500).send({ message: "Failed to update status.", error: err.message });
       }
     });
+
 
     // Delete a donation request
     app.delete("/donation-requests/:id", async (req, res) => {
@@ -257,18 +290,19 @@ async function run() {
     });
 
     // Root health check
-
     app.get("/", (req, res) => {
       res.send("Redhope server is running!");
     });
 
+    // Start listening only after DB is connected and routes are registered
+    app.listen(port, () => {
+      console.log(`Server listening on port ${port}`);
+    });
+
   } catch (error) {
-    console.error("Error connecting to MongoDB:", error);
+    console.error("Fatal: Error connecting to MongoDB:", error);
+    process.exit(1);
   }
 }
 
 run().catch(console.dir);
-
-app.listen(port, () => {
-  console.log(`Server listening on port ${port}`);
-});
