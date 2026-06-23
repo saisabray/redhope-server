@@ -64,9 +64,7 @@ const client = new MongoClient(uri, {
   },
 });
 
-client.connect()
-  .then(() => console.log("Connected to MongoDB"))
-  .catch((err) => console.error("MongoDB connection error:", err));
+let isConnected = false; async function connectDB() { if (!isConnected) { await client.connect(); isConnected = true; console.log('Connected to MongoDB'); } } app.use(async (req, res, next) => { try { await connectDB(); next(); } catch (err) { res.status(500).send({message:'DB Error'}); } });
 
 const database = client.db("redhope");
 const usersCollection = database.collection("user");
