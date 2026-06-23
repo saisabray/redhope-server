@@ -1,6 +1,7 @@
 const express = require("express");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const cors = require("cors");
+const { createRemoteJWKSet, jwtVerify } = require("jose-cjs");
 require("dotenv").config();
 
 const app = express();
@@ -8,9 +9,52 @@ const port = process.env.PORT || 5000;
 
 app.use(cors());
 app.use(express.json());
-
+const JWKS =createRemoteJWKSet(new URL(`${process.env.NEXT_PUBLIC_API_URL}/api/auth/jwks`))
 const uri = process.env.MONGODB_URI;
 
+const verifyToken = async (req, res, next) => {
+    try{
+    const authHeader=req.headers.authorization
+    if(!authHeader || !authHeader.startsWith('Bearer ')){
+      return res.status(401).send({message:'Unauthorized access'})
+    }
+      const token = authHeader.split(' ')[1]
+      if(!token){
+        return res.status(401).send({message:'Unauthorized access'})
+      } 
+      const { payload } = await jwtVerify(token, JWKS);
+      req.user = payload;
+      next()
+    } catch (error) {
+      console.log(error)
+      res.status(401).send({ message: 'Invalid token' })
+      
+    }
+  }
+  
+  const verifyAdmin = async (req, res, next) => {
+    const user = req.user;
+    if (user?.role !== "admin") {
+      return res.status(403).send({ message: "Forbidden access" });
+    }
+    next();
+  };
+
+  const verifyDonor = async (req, res, next) => {
+    const user = req.user;
+    if (user?.role !== "donor") {
+      return res.status(403).send({ message: "Forbidden access" });
+    }
+    next();
+  };
+
+  const verifyVolunteer = async (req, res, next) => {
+    const user = req.user;
+    if (user?.role !== "volunteer") {
+      return res.status(403).send({ message: "Forbidden access" });
+    }
+    next();
+  };
 const client = new MongoClient(uri, {
   serverApi: {
     version: ServerApiVersion.v1,
@@ -30,7 +74,7 @@ async function run() {
     const fundingCollection = database.collection("funding");
 
     //Funding
-    app.post("/funding",async(req,res)=>{
+    app.post("/funding", verifyToken, async(req,res)=>{
         try{
             const {sessionID,userId,amount,stripeId} = req.body
             const result = await fundingCollection.insertOne({
@@ -48,7 +92,7 @@ async function run() {
     })  
 
     // Get all funding records
-    app.get("/funding", async (req, res) => {
+    app.get("/funding", verifyToken, async (req, res) => {
       try {
         const result = await fundingCollection.aggregate([
           {
@@ -88,7 +132,7 @@ async function run() {
     });
 
     // Get all users
-    app.get("/users", async (req, res) => {
+    app.get("/users", verifyToken, verifyAdmin, async (req, res) => {
       try {
         const result = await usersCollection.find().toArray();
         res.send(result);
@@ -126,7 +170,7 @@ async function run() {
     });
 
     // Get single user by id
-    app.get("/users/:id", async (req, res) => {
+    app.get("/users/:id", verifyToken, async (req, res) => {
       try {
         const user = await usersCollection.findOne({ _id: new ObjectId(req.params.id) });
         if (!user) return res.status(404).send({ message: "User not found" });
@@ -138,7 +182,7 @@ async function run() {
     });
 
     // Block / Unblock a user
-    app.patch("/users/:id/status", async (req, res) => {
+    app.patch("/users/:id/status", verifyToken, verifyAdmin, async (req, res) => {
       try {
         const { status } = req.body;
         const result = await usersCollection.updateOne(
@@ -155,7 +199,7 @@ async function run() {
     });
 
     // Update user role
-    app.patch("/users/:id/role", async (req, res) => {
+    app.patch("/users/:id/role", verifyToken, verifyAdmin, async (req, res) => {
       try {
         const { role } = req.body;
         const result = await usersCollection.updateOne(
@@ -172,7 +216,7 @@ async function run() {
     });
 
     // Update user profile (name, image, bloodGroup, district, upazila)
-    app.patch("/users/:id/profile", async (req, res) => {
+    app.patch("/users/:id/profile", verifyToken, async (req, res) => {
       try {
         const { name, image, bloodGroup, district, upazila } = req.body;
         const updateFields = {};
@@ -198,7 +242,7 @@ async function run() {
     // ── Donation Requests ────────────────────────────────────────────────────
 
     // Create a new donation request
-    app.post("/donation-requests", async (req, res) => {
+    app.post("/donation-requests", verifyToken, verifyDonor, async (req, res) => {
       try {
         const {
           requesterName, requesterEmail, requesterId,
@@ -252,7 +296,7 @@ async function run() {
     });
 
     // Get donation requests by requester email
-    app.get("/donation-requests/my/:email", async (req, res) => {
+    app.get("/donation-requests/my/:email", verifyToken, async (req, res) => {
       try {
         const result = await donationRequestsCollection
           .find({ requesterEmail: req.params.email })
@@ -278,7 +322,7 @@ async function run() {
     });
 
     // Update donation request 
-    app.patch("/donation-requests/:id", async (req, res) => {
+    app.patch("/donation-requests/:id", verifyToken, verifyDonor, async (req, res) => {
       try {
         const {
           recipientName, recipientDistrict, recipientUpazila,
@@ -312,7 +356,7 @@ async function run() {
     });
 
     // Update donation request status 
-    app.patch("/donation-requests/:id/status", async (req, res) => {
+    app.patch("/donation-requests/:id/status", verifyToken, verifyDonor, async (req, res) => {
       try {
         const { status, donorName, donorEmail, donorId } = req.body;
         const updateFields = { status };
@@ -336,7 +380,7 @@ async function run() {
 
 
     // Delete a donation request
-    app.delete("/donation-requests/:id", async (req, res) => {
+    app.delete("/donation-requests/:id", verifyToken, async (req, res) => {
       try {
         const result = await donationRequestsCollection.deleteOne({ _id: new ObjectId(req.params.id) });
         if (result.deletedCount === 0)
@@ -345,6 +389,32 @@ async function run() {
       } catch (err) {
         console.error("Error deleting donation request:", err);
         res.status(500).send({ message: "Failed to delete donation request.", error: err.message });
+      }
+    });
+
+    // Admin/Volunteer stats overview
+    app.get("/admin/stats", verifyToken, async (req, res, next) => {
+      if (req.user?.role !== "admin" && req.user?.role !== "volunteer") {
+        return res.status(403).send({ message: "Forbidden access" });
+      }
+      next();
+    }, async (req, res) => {
+      try {
+        const totalDonors = await usersCollection.countDocuments({ role: "donor" });
+        const totalRequests = await donationRequestsCollection.countDocuments();
+        const fundingAgg = await fundingCollection.aggregate([
+          { $group: { _id: null, totalFunding: { $sum: "$amount" } } }
+        ]).toArray();
+        const totalFunding = fundingAgg.length > 0 ? fundingAgg[0].totalFunding : 0;
+
+        res.send({
+          totalDonors,
+          totalFunding,
+          totalRequests
+        });
+      } catch (err) {
+        console.error("Error fetching stats:", err);
+        res.status(500).send({ message: "Failed to fetch stats.", error: err.message });
       }
     });
 
