@@ -27,6 +27,7 @@ async function run() {
     const database = client.db("redhope");
     const usersCollection = database.collection("user");
     const donationRequestsCollection = database.collection("donationRequests");
+    const fundingCollection = database.collection("funding");
 
     // Get all users
     app.get("/users", async (req, res) => {
